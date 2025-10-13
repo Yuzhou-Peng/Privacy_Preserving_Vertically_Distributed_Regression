@@ -1,0 +1,147 @@
+---
+title: "Vertically_Gamma_Regression"
+output: html_document
+---
+
+```{r}
+Gamma_data_generete <- function(X, true_coefficient, y_rate = 1){
+  
+  n_X <- nrow(X)
+  X <- as.matrix(X)
+  
+  beta_true <- true_coefficient
+  
+  eta <- as.matrix(X) %*% as.matrix(beta_true)
+  Y_mean <- exp(eta)
+  
+  # Generate Y values according to Y_mean (fixing rate, scale = 1/rate)
+  
+  rate <- y_rate
+  Y_shape <- Y_mean/rate
+  Y <- rgamma(n = n_X, shape = Y_shape, scale <- 1/rate) 
+  
+  sim_data <- cbind(Y, X)
+
+  return(sim_data)
+}
+
+# Example
+
+n <- 400
+
+
+x1 <- runif(n = n, min = 0, max = 2)
+x2 <- rexp(n = n, rate = 1)
+x3 <- rbinom(n = n, size = 5, prob = 0.1)
+x3 <- as.numeric(x3)
+beta <- c(3, 1, 2)
+
+X <- data.frame(
+  "X1" <- x1,
+  "X2" <- x2,
+  "X3" <- x3
+)
+
+simulation_data <- Gamma_data_generete(X, true_coefficient = beta)
+```
+
+```{r}
+simulation_data
+```
+
+```{r}
+
+#Functions to calculate  the dual likelihood
+gamma_dual_likelihood <- function(Y, X, lambda, gamma){
+  X <- as.matrix(X)
+  
+  
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  return(  (sum((gamma+1)*((log(Y/(1+gamma))) + 1))/m - (t(gamma) %*% XXT %*% gamma)/(2*m*m*lambda))[1,1] )
+}
+
+#Functions to calculate  the dual gradient
+gamma_dual_grad <- function(Y, X, lambda, gamma){
+  
+  m <- nrow(X)
+  
+  X <- as.matrix(X)
+  XXT <- X %*% t(X)
+  
+  log_term <- log(Y/(1+gamma))
+  regularization <- (XXT %*% gamma)/(m*m*lambda)
+  
+  return( (log_term)/m - regularization )
+  
+}
+
+#Functions to calculate the dual Hessian matrix
+gamma_dual_Hess <- function(Y, X, lambda, gamma){
+  X <- as.matrix(X)
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  main_h <- -(1/(1+gamma))/m
+  diag_main_h <- matrix(0, nrow = m, ncol = m) 
+  diag(diag_main_h) <- main_h
+  
+  H <- diag_main_h - XXT/(m*m*lambda)
+  
+  
+  
+  return(  H )
+} 
+
+```
+
+```{r}
+newton_Gamma_optim_dual <- function(f = gamma_dual_likelihood, 
+                                    grad = gamma_dual_grad, 
+                                    hess = gamma_dual_Hess
+                                    , x0 , tol = 1e-2, max_iter = 10, 
+                                    data_set, response_idx){
+  x <- x0
+  iter <- 0
+  converged <- FALSE
+  Y <- data_set[,response_idx]
+  
+  for (i in 1:max_iter) {
+    g <- -gamma_dual_grad(Y, X, lambda = 0.002, gamma = x)
+    H <- -gamma_dual_Hess(Y, X, lambda = 0.002, gamma = x)
+    
+    # Newton step: solve H %*% step = -g
+    step <- solve(H) %*% (-g)
+    
+    # Handle cases where Hessian might not be invertible
+   # if (inherits(step, "try-error")) {
+   #   warning("Hessian is singular at iteration ", i)
+   #   break
+    }
+    
+    x_new <- x + step
+    iter <- i
+    
+    # Check convergence (using L2 norm of gradient)
+    if ( sqrt(sum(g^2)) < 1e-2 ) {
+      converged <- TRUE
+      break
+    }
+    
+    x <- x_new
+  
+  
+  list(par = x, 
+       value = -gamma_dual_likelihood(Y, X, lambda = 0.02, gamma = x), 
+       iterations = iter, 
+       converged = converged,
+       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.002))
+  
+
+}
+```
+
+```{r}
+newton_Gamma_optim_dual(x0 = rep(0, nrow(X)), data_set = Gamma_data_generete(X, true_coefficient = beta), response_idx = 1 )
+```
