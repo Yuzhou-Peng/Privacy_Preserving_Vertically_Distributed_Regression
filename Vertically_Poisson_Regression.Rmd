@@ -1,0 +1,249 @@
+---
+title: "Vertically_Poisson_Regression"
+output: html_document
+---
+
+
+```{r}
+
+Poisson_data_generete <- function(X, true_coefficient){
+  
+  n_X <- nrow(X)
+  X <- as.matrix(X)
+  
+  beta_true <- true_coefficient
+  
+  eta <- as.matrix(X) %*% as.matrix(beta_true)
+  Y_mean <- exp(eta)
+  
+  # Generate Y values according to Y_mean 
+  
+  Y <- rpois(n = n_X, lambda = Y_mean) 
+  
+  sim_data <- cbind(Y, X)
+
+  return(sim_data)
+}
+
+# Example
+
+n <- 400
+
+
+x1 <- runif(n = n, min = 0, max = 2)
+x2 <- rexp(n = n, rate = 1)
+x3 <- rbinom(n = n, size = 5, prob = 0.1)
+x3 <- as.numeric(x3)
+beta <- c(3, 1, 2)
+
+X <- data.frame(
+  "X1" <- x1,
+  "X2" <- x2,
+  "X3" <- x3
+)
+
+simulation_data <- Poisson_data_generete(X, true_coefficient = beta)
+simulation_data <- as.data.frame(simulation_data)
+
+```
+
+
+```{r}
+
+sim_model <- glm(Y ~ X1 + X2 + X3, family = poisson(link = "log"), data = simulation_data)
+
+summary(sim_model)
+```
+
+```{r}
+
+poisson_dual_likelihood <- function(Y, X, lambda, u){
+  X <- as.matrix(X)
+  
+  
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  return(  (sum((u - Y)*((log(Y - u)) - 1))/m - (t(u) %*% XXT %*% u)/(2*m*m*lambda))[1,1] )
+}
+
+
+poisson_dual_grad <- function(Y, X, lambda, u){
+  
+  m <- nrow(X)
+  
+  X <- as.matrix(X)
+  XXT <- X %*% t(X)
+  
+  log_term <- log(Y - u)
+  regularization <- (XXT %*% u)/(m*m*lambda)
+  
+  g <- (log_term)/m - regularization
+  
+  inf_idx <- c()
+  for (i in 1: length(g)){
+    if (g[i] == -Inf){
+      inf_idx <- append(inf_idx, i)
+    }
+  }
+  
+  if ( length(inf_idx) > 0 ){
+    g_de_inf <- g[-inf_idx]
+    
+    for (i in inf_idx){
+      g[i] <- mean(g_de_inf)
+    }
+  }
+  
+  
+  return( g )
+  
+}
+
+ 
+poisson_dual_Hess <- function(Y, X, lambda, u){
+  X <- as.matrix(X)
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  main_h <- (1/(u - Y))/m
+  diag_main_h <- matrix(0, nrow = m, ncol = m) 
+  diag(diag_main_h) <- main_h
+  
+  H <- diag_main_h - XXT/(m*m*lambda)
+  
+  return( H )
+}
+
+
+```
+
+
+```{r}
+newton_Poisson_optim_dual <- function(f = poisson_dual_likelihood, 
+                                    grad = poisson_dual_grad, 
+                                    hess = poisson_dual_Hess
+                                    , x0 , tol = 1e-2, max_iter = 10, 
+                                    data_set, response_idx){
+  x <- x0
+  iter <- 0
+  converged <- FALSE
+  Y <- data_set[,response_idx]
+  
+  for (i in 1:max_iter) {
+    g <- -poisson_dual_grad(Y, X, lambda = 0.002, u = x)
+    H <- -poisson_dual_Hess(Y, X, lambda = 0.002, u = x)
+    
+    # Newton step: solve H %*% step = -g
+    step <- solve(H) %*% (-g)
+    
+    # Handle cases where Hessian might not be invertible
+   # if (inherits(step, "try-error")) {
+   #   warning("Hessian is singular at iteration ", i)
+   #   break
+    }
+    
+    x_new <- x + step
+    iter <- i
+    
+    # Check convergence (using L2 norm of gradient)
+    if ( sqrt(sum(g^2)) < 1e-2 ) {
+      converged <- TRUE
+      break
+    }
+    
+    x <- x_new
+  
+  
+  list(par = x, 
+       value = -poisson_dual_likelihood(Y, X, lambda = 0.02, u = x), 
+       iterations = iter, 
+       converged = converged,
+       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.002))
+  
+
+}
+```
+
+```{r}
+newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
+```
+
+```{r}
+
+  x <- rep(0, n_X)
+  iter <- 0
+  converged <- FALSE
+  
+  for (i in 1:1) {
+    g <- -poisson_dual_grad(Y, X, lambda = 0.02, u = x)
+    H <- -poisson_dual_Hess(Y, X, lambda = 0.02, u = x)
+    
+    # Newton step: solve H %*% step = -g
+    step <- solve(H) %*% (-g)
+    
+    # Handle cases where Hessian might not be invertible
+   # if (inherits(step, "try-error")) {
+   #   warning("Hessian is singular at iteration ", i)
+   #   break
+    }
+    
+    x_new <- x + step
+    iter <- i
+    
+    # Check convergence (using L2 norm of gradient)
+    if ( sqrt(sum(g^2)) < 1e-4 ) {
+      converged <- TRUE
+      break
+    }
+    
+    x <- x_new
+  
+  
+  list(par = x, 
+       value = -poisson_dual_likelihood(Y, X, lambda = 0.02, u = x), 
+       iterations = iter, 
+       converged = converged)
+       
+       
+```
+
+
+
+
+
+
+
+```{r}
+newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
+```
+
+
+```{r}
+g <- poisson_dual_grad(Y, X, lambda = 0.02, u = rep(0, 200))
+
+g
+
+inf_idx <- c()
+for (i in 1:length(g)){
+  if (g[i] == Inf){
+    inf_idx <- append(inf_idx, i)
+  }
+}
+
+inf_idx
+```
+
+```{r}
+H
+
+which(solve(H) == Inf, arr.ind = T)
+```
+
+```{r}
+(t(X) %*% x)/(n_X*0.02)
+```
+
+```{r}
+ sqrt(sum((poisson_dual_grad(Y, X, lambda = 0.02, u = x))^2))
+```
