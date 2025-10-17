@@ -11,5 +11,3 @@
 ## Description
 
 This README is prepared for journal peer review of the "Privacy Preserving Vertically Distributed Learning" paper.
-
-
