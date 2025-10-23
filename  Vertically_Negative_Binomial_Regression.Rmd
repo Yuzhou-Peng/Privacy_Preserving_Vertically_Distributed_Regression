@@ -1,0 +1,51 @@
+---
+title: " Vertically_Negative_Regression"
+output: html_document
+---
+
+```{r}
+NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
+  
+  n_X <- nrow(X)
+  X <- as.matrix(X)
+  
+  beta_true <- true_coefficient
+  
+  eta <- as.matrix(X) %*% as.matrix(beta_true)
+  Y_mean <- exp(eta)
+  
+  # Generate Y values according to Y_mean (fixing rate, scale = 1/rate)
+  
+  rate <- y_rate
+  Y_shape <- Y_mean/rate
+  Y <- rnbinom(n_X, mu = Y_mean, size = 5)
+  
+  sim_data <- cbind(Y, X)
+
+  return(sim_data)
+}
+
+# Example
+
+n <- 400
+
+
+x1 <- runif(n = n, min = 0, max = 2)
+x2 <- rexp(n = n, rate = 1)
+x3 <- rbinom(n = n, size = 3, prob = 0.1)
+x3 <- as.numeric(x3)
+beta <- c(3, 1, 2)
+
+X <- data.frame(
+  "X1" <- x1,
+  "X2" <- x2,
+  "X3" <- x3
+)
+
+simulation_data <- NegBin_data_generete(X, true_coefficient = beta)
+```
+
+```{r}
+
+
+```

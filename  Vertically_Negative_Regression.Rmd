@@ -1,5 +1,0 @@
----
-title: " Vertically_Negative_Regression"
-output: html_document
----
-
