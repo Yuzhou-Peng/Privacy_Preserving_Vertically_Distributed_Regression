@@ -4,6 +4,12 @@ output: html_document
 ---
 
 ```{r}
+library(MASS)
+```
+
+```{r}
+set.seed(1028)
+
 NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
   
   n_X <- nrow(X)
@@ -43,9 +49,119 @@ X <- data.frame(
 )
 
 simulation_data <- NegBin_data_generete(X, true_coefficient = beta)
+
+colnames(simulation_data) <- c("Y", "X1", "X2", "X3")
+
+simulation_data <- as.data.frame(simulation_data)
+```
+
+```{r}
+summary(glm.nb(Y~X1 + X2 + X3, data = simulation_data))
+
+```
+
+
+```{r}
+
+#Functions to calculate  the dual likelihood
+NB_dual_likelihood <- function(Y, X, lambda, u, r){
+  X <- as.matrix(X)
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  penalty <- ((t(u) %*% XXT %*% u)/(2*m*m*lambda))[1,1]
+  
+  major_part <- sum( (u - Y) * log(Y - u) + (Y + r) * log( Y + r ) - (r + u) * log(r + u) + (u + r) * log(r)  )/m
+  
+  
+  
+  return( major_part - penalty  )
+}
+
+
+NB_dual_grad <- function(Y, X, lambda, u, r){
+  
+  m <- nrow(X)
+  
+  X <- as.matrix(X)
+  XXT <- X %*% t(X)
+  
+  penalty <- (XXT %*% u)/(m*m*lambda)
+  
+  major_part <- sum(  log(Y - u) + log(r) - log(r + u)  )/m
+  
+  return( major_part - penalty )
+  
+}
+
+NB_dual_grad(simulation_data$Y, X, lambda = 0.2, u = rep(-1, nrow(simulation_data)), r = 5)
+
+
+NB_dual_Hess <- function(Y, X, lambda, u, r){
+  X <- as.matrix(X)
+  m <- nrow(X)
+  XXT <- X %*% t(X) 
+  
+  main_h <- - ( 1/(Y - u) + 1/(r + u) ) /m
+  diag_main_h <- matrix(0, nrow = m, ncol = m) 
+  diag(diag_main_h) <- main_h
+  
+  H <- diag_main_h - XXT/(m*m*lambda)
+  
+  
+  
+  return(  H )
+} 
+
+NB_dual_Hess(simulation_data$Y, X, lambda = 0.2, u = rep(-1, nrow(simulation_data)), r = 5)
+
 ```
 
 ```{r}
 
+newton_NB_optim_dual <- function(f = NB_dual_likelihood, 
+                                    grad = NB_dual_grad, 
+                                    hess = NB_dual_Hess
+                                    , x0 , r,  tol = 1e-2, max_iter = 1, 
+                                    data_set, response_idx){
+  x <- x0
+  iter <- 0
+  converged <- FALSE
+  Y <- data_set[,response_idx]
+  
+  for (i in 1:max_iter) {
+    g <- -NB_dual_grad(Y, X, lambda = 0.002, u = x, r)
+    H <- -NB_dual_Hess(Y, X, lambda = 0.002, u = x, r)
+    
+    # Newton step: solve H %*% step = -g
+    step <- solve(H) %*% (-g)
+    
+    # Handle cases where Hessian might not be invertible
+   # if (inherits(step, "try-error")) {
+   #   warning("Hessian is singular at iteration ", i)
+   #   break
+    }
+    
+    x_new <- x + step
+    iter <- i
+    
+    # Check convergence (using L2 norm of gradient)
+    if ( sqrt(sum(g^2)) < 1e-2 ) {
+      converged <- TRUE
+      break
+    }
+    
+    x <- x_new
+  
+  
+  list(par = x, 
+       value = -NB_dual_likelihood(Y, X, lambda = 0.02, u = x, r), 
+       iterations = iter, 
+       converged = converged,
+       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.002))
+}
+```
 
+```{r}
+newton_NB_optim_dual(x0 = rep(-0.1, nrow(simulation_data)), r = 5, data_set = simulation_data, response_idx = 1)
 ```
