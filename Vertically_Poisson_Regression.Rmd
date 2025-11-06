@@ -29,6 +29,7 @@ Poisson_data_generete <- function(X, true_coefficient){
 
 n <- 400
 
+set.seed(115)
 
 x1 <- runif(n = n, min = 0, max = 2)
 x2 <- rexp(n = n, rate = 1)
@@ -44,7 +45,7 @@ X <- data.frame(
 
 simulation_data <- Poisson_data_generete(X, true_coefficient = beta)
 simulation_data <- as.data.frame(simulation_data)
-
+colnames(simulation_data) <- c("Y", "X1", "X2", "X3")
 ```
 
 
@@ -129,10 +130,11 @@ newton_Poisson_optim_dual <- function(f = poisson_dual_likelihood,
   iter <- 0
   converged <- FALSE
   Y <- data_set[,response_idx]
+  X <- data_set[, -response_idx]
   
   for (i in 1:max_iter) {
-    g <- -poisson_dual_grad(Y, X, lambda = 0.002, u = x)
-    H <- -poisson_dual_Hess(Y, X, lambda = 0.002, u = x)
+    g <- -poisson_dual_grad(Y, X, lambda = 0.2, u = x)
+    H <- -poisson_dual_Hess(Y, X, lambda = 0.2, u = x)
     
     # Newton step: solve H %*% step = -g
     step <- solve(H) %*% (-g)
@@ -156,10 +158,10 @@ newton_Poisson_optim_dual <- function(f = poisson_dual_likelihood,
   
   
   list(par = x, 
-       value = -poisson_dual_likelihood(Y, X, lambda = 0.02, u = x), 
+       value = -poisson_dual_likelihood(Y, X, lambda = 0.2, u = x), 
        iterations = iter, 
        converged = converged,
-       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.002))
+       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.2))
   
 
 }
@@ -170,80 +172,77 @@ newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete
 ```
 
 ```{r}
+# What if we run Poisson model for every single feature
 
-  x <- rep(0, n_X)
-  iter <- 0
-  converged <- FALSE
-  
-  for (i in 1:1) {
-    g <- -poisson_dual_grad(Y, X, lambda = 0.02, u = x)
-    H <- -poisson_dual_Hess(Y, X, lambda = 0.02, u = x)
-    
-    # Newton step: solve H %*% step = -g
-    step <- solve(H) %*% (-g)
-    
-    # Handle cases where Hessian might not be invertible
-   # if (inherits(step, "try-error")) {
-   #   warning("Hessian is singular at iteration ", i)
-   #   break
-    }
-    
-    x_new <- x + step
-    iter <- i
-    
-    # Check convergence (using L2 norm of gradient)
-    if ( sqrt(sum(g^2)) < 1e-4 ) {
-      converged <- TRUE
-      break
-    }
-    
-    x <- x_new
-  
-  
-  list(par = x, 
-       value = -poisson_dual_likelihood(Y, X, lambda = 0.02, u = x), 
-       iterations = iter, 
-       converged = converged)
-       
-       
+feature_1_only_model <- glm(Y ~ X1, family = poisson(link = "log"), data = simulation_data)
+feature_1_only_model$coefficients
+
+feature_2_only_model <- glm(Y ~ X2, family = poisson(link = "log"), data = simulation_data)
+feature_2_only_model$coefficients
+
+feature_3_only_model <- glm(Y ~ X3, family = poisson(link = "log"), data = simulation_data)
+feature_3_only_model$coefficients
+
+
+
 ```
 
-
-
-
-
-
-
 ```{r}
-newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
-```
+# Bootstrapping for confidence interval
 
 
-```{r}
-g <- poisson_dual_grad(Y, X, lambda = 0.02, u = rep(0, 200))
+beta_estimate_dual <- newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )$coefficient_estimate
 
-g
+set.seed(115)
 
-inf_idx <- c()
-for (i in 1:length(g)){
-  if (g[i] == Inf){
-    inf_idx <- append(inf_idx, i)
-  }
+
+n_boot <- 50
+
+# Store bootstrap samples in a list
+bootstrap_samples <- vector("list", n_boot)
+
+# Perform resampling
+
+for (i in seq_len(n_boot)) {
+  bootstrap_samples[[i]] <- simulation_data[sample(nrow(simulation_data), replace = TRUE), ]
 }
 
-inf_idx
+
+beta_estimate_dual_bootstrap <-  sapply(bootstrap_samples, function(df) {
+  bs_coeff <- newton_Poisson_optim_dual(data_set = df, x0 = rep(0, nrow(df)), response_idx = 1)$coefficient_estimate
+} )
+
+
+var_bootstrap <- apply(beta_estimate_dual_bootstrap, MARGIN = 1, FUN = var)
+
+diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN = "-")
+#standardized_diff <- sweep(standardized_diff, 1, sqrt(boot_variance), FUN = "/")
+
+
 ```
+
 
 ```{r}
-H
+pivot_bootstrap <- sweep(diff_bootstrap , 1, sqrt(2 * var_bootstrap), FUN = "/")
 
-which(solve(H) == Inf, arr.ind = T)
+pivot_bootstrap_quantile <- t(apply(pivot_bootstrap, 1, function(x) {
+  quantile(x, probs = c(0.025, 0.975))
+}))
+
+CI_lower_bootstrap <- beta_estimate_dual - pivot_bootstrap_quantile[,2] * sqrt(var_bootstrap)
+CI_upper_bootstrap <- beta_estimate_dual - pivot_bootstrap_quantile[,1] * sqrt(var_bootstrap)
+
+cbind(CI_lower_bootstrap, CI_upper_bootstrap)
 ```
 
-```{r}
-(t(X) %*% x)/(n_X*0.02)
-```
 
-```{r}
- sqrt(sum((poisson_dual_grad(Y, X, lambda = 0.02, u = x))^2))
-```
+
+
+
+
+
+
+
+
+
+
