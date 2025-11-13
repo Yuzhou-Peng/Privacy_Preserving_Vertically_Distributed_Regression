@@ -223,16 +223,7 @@ diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN
 
 
 ```{r}
-pivot_bootstrap <- sweep(diff_bootstrap , 1, sqrt(2 * var_bootstrap), FUN = "/")
 
-pivot_bootstrap_quantile <- t(apply(pivot_bootstrap, 1, function(x) {
-  quantile(x, probs = c(0.025, 0.975))
-}))
-
-CI_lower_bootstrap <- beta_estimate_dual - pivot_bootstrap_quantile[,2] * sqrt(var_bootstrap)
-CI_upper_bootstrap <- beta_estimate_dual - pivot_bootstrap_quantile[,1] * sqrt(var_bootstrap)
-
-cbind(CI_lower_bootstrap, CI_upper_bootstrap)
 ```
 
 

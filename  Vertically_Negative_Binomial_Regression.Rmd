@@ -33,7 +33,7 @@ NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
 
 # Example
 
-n <- 400
+n <- 10000 
 
 
 x1 <- runif(n = n, min = 0, max = 2)
@@ -164,4 +164,62 @@ newton_NB_optim_dual <- function(f = NB_dual_likelihood,
 
 ```{r}
 newton_NB_optim_dual(x0 = rep(-0.1, nrow(simulation_data)), r = 5, data_set = simulation_data, response_idx = 1)
+```
+
+```{r}
+# Negative binomial dual objective D(u)
+D_obj <- function(u, X, y, r, m, lambda) {
+  # domain check to avoid invalid logs
+  if (any(r + u <= 0) || any(y - u <= 0)) return(-Inf)
+  
+  n <- length(u)
+  h_term <- (r + u) * log((r + u) / r) +
+            (y - u) * log(y - u) -
+            (r + y) * log(r + y)
+  D_val <- mean(-h_term) - 0.5 / (m^2 * lambda) * crossprod(u, X %*% t(X) %*% u)
+  as.numeric(D_val)
+}
+
+# Gradient of D(u)
+grad_D <- function(u, X, y, r, m, lambda) {
+  n <- length(u)
+  grad_h <- log((r + u) / (r * (y - u)))   # d/du h(-u)
+  grad_val <- -grad_h / n - (1 / (m^2 * lambda)) * (X %*% (t(X) %*% u))
+  as.vector(grad_val)
+}
+
+# Hessian of D(u)
+hess_D <- function(u, X, y, r, m, lambda) {
+  n <- length(u)
+  diag_h <- - (1 / (r + u) + 1 / (y - u)) / n   # -h''(-u_i)/n
+  H <- diag(diag_h) - (1 / (m^2 * lambda)) * (X %*% t(X))
+  H
+}
+
+```
+
+```{r}
+gradient_ascent <- function(u_init, X, y, r, m, lambda, 
+                            lr = 0.01, tol = 1e-6, max_iter = 1e6) {
+  u <- u_init
+  for (iter in 1:max_iter) {
+    g <- grad_D(u, X, y, r, m, lambda)
+    u_new <- u + lr * g
+    if (any(r + u_new <= 0) || any(y - u_new <= 0)) {
+      warning("Step out of domain, reducing step size")
+      lr <- lr / 2
+      next
+    }
+    if (sqrt(sum((u_new - u)^2)) < tol) break
+    u <- u_new
+  }
+  list(u = u, iter = iter, value = D_obj(u, X, y, r, m, lambda))
+}
+
+
+opt_result <- gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)
+
+u_opt <- opt_result$u
+
+t(X) %*% u_opt / (10000  * 0.02)
 ```
