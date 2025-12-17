@@ -145,3 +145,20 @@ newton_Gamma_optim_dual <- function(f = gamma_dual_likelihood,
 ```{r}
 newton_Gamma_optim_dual(x0 = rep(0, nrow(X)), data_set = Gamma_data_generete(X, true_coefficient = beta), response_idx = 1 )
 ```
+
+
+Working with NMDA_with_population_sex_ratio
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+```{r}
+nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
+
+```
+
+```{r}
+nmda %>%
+  filter(`Date of onset1` == "2018-07" )
+```
