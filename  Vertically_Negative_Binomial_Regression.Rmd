@@ -5,6 +5,8 @@ output: html_document
 
 ```{r}
 library(MASS)
+library(glmnet)
+library(tidyverse)
 ```
 
 ```{r}
@@ -222,4 +224,55 @@ opt_result <- gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = sim
 u_opt <- opt_result$u
 
 t(X) %*% u_opt / (10000  * 0.02)
+```
+
+
+NMDA Data Analysis
+```{r}
+source("NMDA_preprocessing.R")
+
+df_model <- summary_by_onset %>%
+  dplyr::select(-onset_month)
+
+y_n_cases <- df_model$n_cases
+X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
+
+cv_fit <- cv.glmnet(
+  x = X_chemicals,
+  y = y_n_cases,
+  family = "poisson",
+  alpha = 0,        # alpha = 0 → ridge
+  standardize = TRUE
+)
+
+plot(cv_fit)
+
+
+coef_ridge <- coef(cv_fit, s = "lambda.min")
+coef_ridge
+
+
+lambda_hat <- predict(cv_fit, newx = X_chemicals, s = "lambda.min", type = "response")
+
+dispersion_ratio <- sum((y_n_cases - lambda_hat)^2 / lambda_hat) / (length(y_n_cases) - ncol(X_chemicals))
+dispersion_ratio
+
+
+newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
+```
+
+```{r}
+
+```
+
+
+```{r}
+glm.nb(n_cases ~., data = df_model)
+```
+
+```{r}
+
+dual_nb_fit_res <- gradient_ascent(u_init = rep(-1, nrow(X_chemicals)), X = as.matrix(X_chemicals), y = y_n_cases, r = 1.77, m = nrow(X_chemicals), lambda = 0.02)
+
+t(X_chemicals) %*% dual_nb_fit_res$u / (nrow(X_chemicals)  * 0.02)
 ```
