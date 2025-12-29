@@ -81,21 +81,6 @@ poisson_dual_grad <- function(Y, X, lambda, u){
   
   g <- (log_term)/m - regularization
   
-  inf_idx <- c()
-  for (i in 1: length(g)){
-    if (g[i] == -Inf){
-      inf_idx <- append(inf_idx, i)
-    }
-  }
-  
-  if ( length(inf_idx) > 0 ){
-    g_de_inf <- g[-inf_idx]
-    
-    for (i in inf_idx){
-      g[i] <- mean(g_de_inf)
-    }
-  }
-  
   
   return( g )
   
@@ -120,6 +105,7 @@ poisson_dual_Hess <- function(Y, X, lambda, u){
 ```
 
 
+Newton's Method
 ```{r}
 newton_Poisson_optim_dual <- function(f = poisson_dual_likelihood, 
                                     grad = poisson_dual_grad, 
@@ -170,6 +156,103 @@ newton_Poisson_optim_dual <- function(f = poisson_dual_likelihood,
 ```{r}
 newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
 ```
+
+Projected Gradient Ascent 
+```{r}
+poisson_dual_gradient_ascent <- function(Y, X, lambda, u0 = NULL,
+                             eps = 1e-8,
+                             step0 = 1.0,
+                             max_iter = 50000 ,
+                             tol = 1e-6,
+                             backtrack_beta = 0.5,
+                             armijo_c = 1e-4,
+                             verbose = TRUE){
+
+  Y <- as.numeric(Y)
+  X <- as.matrix(X)
+  m <- nrow(X)
+
+  if (length(Y) != m) stop("length(Y) must equal nrow(X).")
+  if (!is.finite(lambda) || lambda <= 0) stop("lambda must be > 0.")
+
+  # projection to the feasible set: u <= Y - eps (elementwise)
+  proj_u <- function(u) pmin(u, Y - eps)
+
+  # initialize u
+  if (is.null(u0)) {
+    u <- Y - 1.0  # a safe default if Y >= 1; we'll project anyway
+  } else {
+    u <- as.numeric(u0)
+    if (length(u) != m) stop("length(u0) must equal length(Y).")
+  }
+  u <- proj_u(u)
+
+  # helper: safe objective (returns -Inf if out of domain)
+  f_safe <- function(u){
+    if (any(Y - u <= 0) || any(!is.finite(u))) return(-Inf)
+    poisson_dual_likelihood(Y, X, lambda, u)
+  }
+
+  f <- f_safe(u)
+  if (!is.finite(f)) stop("Initial u is infeasible (Y - u must be > 0).")
+
+  history <- data.frame(iter = integer(0), obj = numeric(0), grad_norm = numeric(0), step = numeric(0))
+
+  for (iter in 1:max_iter){
+    g <- poisson_dual_grad(Y, X, lambda, u)
+    if (any(!is.finite(g))) stop("Gradient produced non-finite values; check feasibility and inputs.")
+
+    gnorm <- sqrt(sum(g^2))
+    if (gnorm < tol) {
+      if (verbose) message(sprintf("Converged at iter %d: grad_norm=%.3e, obj=%.10f", iter, gnorm, f))
+      history <- rbind(history, data.frame(iter=iter, obj=f, grad_norm=gnorm, step=0))
+      break
+    }
+
+    step <- step0
+    # ascent direction is +g
+    # Armijo-style condition for ascent:
+    # f(u_new) >= f(u) + c * step * ||g||^2
+    repeat {
+      u_new <- proj_u(u + step * g)  # projection enforces Y - u_new >= eps
+      f_new <- f_safe(u_new)
+
+      if (is.finite(f_new) && (f_new >= f + armijo_c * step * (gnorm^2))) {
+        break
+      }
+
+      step <- step * backtrack_beta
+      if (step < 1e-16) {
+        if (verbose) message(sprintf("Step size collapsed at iter %d. Stopping.", iter))
+        u_new <- u
+        f_new <- f
+        break
+      }
+    }
+
+    u <- u_new
+    f <- f_new
+
+    history <- rbind(history, data.frame(iter=iter, obj=f, grad_norm=gnorm, step=step))
+
+    if (verbose && (iter %% 50 == 0)) {
+      message(sprintf("iter=%d  obj=%.10f  grad_norm=%.3e  step=%.3e", iter, f, gnorm, step))
+    }
+  }
+
+  list(u = u, objective = f, history = history)
+}
+
+
+
+```
+
+```{r}
+poisson_sim_u_opt <- poisson_dual_gradient_ascent(Y = simulation_data$Y, X = X, lambda = 0.02, u0 = rep(0, nrow(X)))$u
+t(X) %*% poisson_sim_u_opt / (nrow(X)  * 0.02)
+```
+
+
 
 ```{r}
 # What if we run Poisson model for every single feature
@@ -222,8 +305,43 @@ diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN
 ```
 
 
-```{r}
+Monthly grouped numbers of cases v.s. all chemicals
 
+```{r}
+library(readxl)
+library(tidyverse)
+
+nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
+```
+
+```{r}
+source("NMDA_preprocessing.R")
+
+df_model <- summary_by_onset %>%
+  dplyr::select(-onset_month)
+
+y_n_cases <- df_model$n_cases
+X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
+
+#poisson_sim_u_opt_nmda <- poisson_dual_gradient_ascent(Y = y_n_cases, X = X_chemicals, lambda = 0.02, u0 = rep(0, nrow(X_chemicals)))$u
+#t(X_chemicals) %*% poisson_sim_u_opt_nmda / (nrow(X_chemicals)  * 0.02)
+```
+
+mRS
+```{r}
+y_mRS <- nmda$mRS
+y_mRS <- as.numeric(y_mRS)
+
+X_design <- nmda %>%
+  select(Age, Seizures, CO_24h_M0, NO2_24h_M0, PM2.5_24h_M0, SO2_24h_M0)
+
+X_design <- as.matrix(X_design)
+X_design <- apply(X_design, 2, as.numeric)
+
+
+mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.2)$u
+
+mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.2)
 ```
 
 

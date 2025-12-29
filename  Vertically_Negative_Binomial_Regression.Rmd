@@ -201,7 +201,7 @@ hess_D <- function(u, X, y, r, m, lambda) {
 ```
 
 ```{r}
-gradient_ascent <- function(u_init, X, y, r, m, lambda, 
+NB_dual_gradient_ascent <- function(u_init, X, y, r, m, lambda, 
                             lr = 0.01, tol = 1e-6, max_iter = 1e6) {
   u <- u_init
   for (iter in 1:max_iter) {
@@ -218,8 +218,11 @@ gradient_ascent <- function(u_init, X, y, r, m, lambda,
   list(u = u, iter = iter, value = D_obj(u, X, y, r, m, lambda))
 }
 
+```
 
-opt_result <- gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)
+```{r}
+
+opt_result <- NB_dual_gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)
 
 u_opt <- opt_result$u
 
@@ -237,6 +240,8 @@ df_model <- summary_by_onset %>%
 y_n_cases <- df_model$n_cases
 X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
 
+
+# Fit a Poisson Model
 cv_fit <- cv.glmnet(
   x = X_chemicals,
   y = y_n_cases,
@@ -258,21 +263,7 @@ dispersion_ratio <- sum((y_n_cases - lambda_hat)^2 / lambda_hat) / (length(y_n_c
 dispersion_ratio
 
 
-newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )
-```
-
-```{r}
 
 ```
 
 
-```{r}
-glm.nb(n_cases ~., data = df_model)
-```
-
-```{r}
-
-dual_nb_fit_res <- gradient_ascent(u_init = rep(-1, nrow(X_chemicals)), X = as.matrix(X_chemicals), y = y_n_cases, r = 1.77, m = nrow(X_chemicals), lambda = 0.02)
-
-t(X_chemicals) %*% dual_nb_fit_res$u / (nrow(X_chemicals)  * 0.02)
-```

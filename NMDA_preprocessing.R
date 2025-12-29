@@ -29,4 +29,3 @@ summary_by_onset <- df %>%
   ) %>%
   arrange(onset_month)
 
-summary_by_onset
