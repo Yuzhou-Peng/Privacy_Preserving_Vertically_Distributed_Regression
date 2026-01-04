@@ -55,7 +55,7 @@ sim_model <- glm(Y ~ X1 + X2 + X3, family = poisson(link = "log"), data = simula
 
 summary(sim_model)
 ```
-
+#Likelihood, Gradient and Hessian
 ```{r}
 
 poisson_dual_likelihood <- function(Y, X, lambda, u){
@@ -233,14 +233,11 @@ poisson_dual_gradient_ascent <- function(Y, X, lambda, u0 = NULL,
     u <- u_new
     f <- f_new
 
-    history <- rbind(history, data.frame(iter=iter, obj=f, grad_norm=gnorm, step=step))
 
-    if (verbose && (iter %% 50 == 0)) {
-      message(sprintf("iter=%d  obj=%.10f  grad_norm=%.3e  step=%.3e", iter, f, gnorm, step))
-    }
+
   }
 
-  list(u = u, objective = f, history = history)
+  list(u = u, objective = f)
 }
 
 
@@ -328,20 +325,40 @@ X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
 ```
 
 mRS
+
+
 ```{r}
 y_mRS <- nmda$mRS
 y_mRS <- as.numeric(y_mRS)
 
 X_design <- nmda %>%
-  select(Age, Seizures, CO_24h_M0, NO2_24h_M0, PM2.5_24h_M0, SO2_24h_M0)
+  select(Age, Seizures, CO_24h_M0)
 
 X_design <- as.matrix(X_design)
 X_design <- apply(X_design, 2, as.numeric)
 
 
-mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.2)$u
 
-mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.2)
+idx_keep <- apply(X_design, 1, function(r) all(is.finite(r)))
+sum(!idx_keep)   # how many rows dropped
+
+X_design <- X_design[idx_keep, , drop = FALSE]
+y_mRS <- y_mRS[idx_keep]
+
+
+
+
+mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.02, max_iter = 1e5)$u
+
+mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.02)
+```
+
+```{r}
+glm(
+  Y ~ . - 1,
+  data   = data.frame(Y = y_mRS, X_design),
+  family = poisson(link = "log")
+)
 ```
 
 
