@@ -309,6 +309,7 @@ library(readxl)
 library(tidyverse)
 
 nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
+
 ```
 
 ```{r}
@@ -331,8 +332,10 @@ mRS
 y_mRS <- nmda$mRS
 y_mRS <- as.numeric(y_mRS)
 
+nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
+
 X_design <- nmda %>%
-  select(Age, Seizures, CO_24h_M0)
+  dplyr::select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
 
 X_design <- as.matrix(X_design)
 X_design <- apply(X_design, 2, as.numeric)
@@ -348,9 +351,9 @@ y_mRS <- y_mRS[idx_keep]
 
 
 
-mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.02, max_iter = 1e5)$u
+mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.002, max_iter = 5e4)$u
 
-mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.02)
+mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.002)
 ```
 
 ```{r}

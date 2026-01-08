@@ -230,40 +230,50 @@ t(X) %*% u_opt / (10000  * 0.02)
 ```
 
 
-NMDA Data Analysis
+NMDA
 ```{r}
-source("NMDA_preprocessing.R")
+library(readxl)
+library(tidyverse)
 
-df_model <- summary_by_onset %>%
-  dplyr::select(-onset_month)
-
-y_n_cases <- df_model$n_cases
-X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
-
-
-# Fit a Poisson Model
-cv_fit <- cv.glmnet(
-  x = X_chemicals,
-  y = y_n_cases,
-  family = "poisson",
-  alpha = 0,        # alpha = 0 → ridge
-  standardize = TRUE
-)
-
-plot(cv_fit)
-
-
-coef_ridge <- coef(cv_fit, s = "lambda.min")
-coef_ridge
-
-
-lambda_hat <- predict(cv_fit, newx = X_chemicals, s = "lambda.min", type = "response")
-
-dispersion_ratio <- sum((y_n_cases - lambda_hat)^2 / lambda_hat) / (length(y_n_cases) - ncol(X_chemicals))
-dispersion_ratio
-
-
-
+nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
 ```
+
+
+mRS
+```{r}
+y_mRS <- nmda$mRS
+y_mRS <- as.numeric(y_mRS)
+
+X_design <- nmda %>%
+  select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
+
+X_design <- as.matrix(X_design)
+X_design <- apply(X_design, 2, as.numeric)
+
+
+
+idx_keep <- apply(X_design, 1, function(r) all(is.finite(r)))
+sum(!idx_keep)   # how many rows dropped
+
+X_design <- X_design[idx_keep, , drop = FALSE]
+y_mRS <- y_mRS[idx_keep]
+
+mRS_opt_u_NB <- NB_dual_gradient_ascent(u_init = rep(-1, length(y_mRS)), X = as.matrix(X_design), y = y_mRS, r = 1.7, m = length(y_mRS), lambda = 0.02)$u
+
+
+mRS_dual_beta_NB <- t(X_design) %*% mRS_opt_u_NB / (nrow(X_design)  * 0.02)
+```
+
+
+```{r}
+
+ glm.nb(
+  Y ~ . - 1,        
+  data = data.frame(Y = y_mRS, X_design),
+  link = log
+)
+```
+
+
 
 
