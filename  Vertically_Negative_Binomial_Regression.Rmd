@@ -58,7 +58,7 @@ simulation_data <- as.data.frame(simulation_data)
 ```
 
 ```{r}
-summary(glm.nb(Y~X1 + X2 + X3, data = simulation_data))
+glm.nb(Y~X1 + X2 + X3, data = simulation_data)
 
 ```
 
@@ -96,8 +96,6 @@ NB_dual_grad <- function(Y, X, lambda, u, r){
   
 }
 
-NB_dual_grad(simulation_data$Y, X, lambda = 0.2, u = rep(-1, nrow(simulation_data)), r = 5)
-
 
 NB_dual_Hess <- function(Y, X, lambda, u, r){
   X <- as.matrix(X)
@@ -115,7 +113,6 @@ NB_dual_Hess <- function(Y, X, lambda, u, r){
   return(  H )
 } 
 
-NB_dual_Hess(simulation_data$Y, X, lambda = 0.2, u = rep(-1, nrow(simulation_data)), r = 5)
 
 ```
 
@@ -168,6 +165,9 @@ newton_NB_optim_dual <- function(f = NB_dual_likelihood,
 newton_NB_optim_dual(x0 = rep(-0.1, nrow(simulation_data)), r = 5, data_set = simulation_data, response_idx = 1)
 ```
 
+
+
+
 ```{r}
 # Negative binomial dual objective D(u)
 D_obj <- function(u, X, y, r, m, lambda) {
@@ -215,18 +215,19 @@ NB_dual_gradient_ascent <- function(u_init, X, y, r, m, lambda,
     if (sqrt(sum((u_new - u)^2)) < tol) break
     u <- u_new
   }
-  list(u = u, iter = iter, value = D_obj(u, X, y, r, m, lambda))
+  
+  beta <- t(X) %*% u / (nrow(X)  * lambda)
+  
+  list(u = u, iter = iter, value = D_obj(u, X, y, r, m, lambda), b = beta)
 }
 
 ```
 
 ```{r}
 
-opt_result <- NB_dual_gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)
+NB_dual_gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)$b
 
-u_opt <- opt_result$u
 
-t(X) %*% u_opt / (10000  * 0.02)
 ```
 
 
@@ -245,7 +246,7 @@ y_mRS <- nmda$mRS
 y_mRS <- as.numeric(y_mRS)
 
 X_design <- nmda %>%
-  select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
+  dplyr::select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
 
 X_design <- as.matrix(X_design)
 X_design <- apply(X_design, 2, as.numeric)
@@ -258,17 +259,15 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-mRS_opt_u_NB <- NB_dual_gradient_ascent(u_init = rep(-1, length(y_mRS)), X = as.matrix(X_design), y = y_mRS, r = 1.7, m = length(y_mRS), lambda = 0.02)$u
 
-
-mRS_dual_beta_NB <- t(X_design) %*% mRS_opt_u_NB / (nrow(X_design)  * 0.02)
+mRS_dual_beta_NB <- NB_dual_gradient_ascent(u_init = rep(-1, length(y_mRS)), X = as.matrix(X_design), y = y_mRS, r = 1.7, m = length(y_mRS), lambda = 0.002, max_iter = 1e7)$b
 ```
 
 
 ```{r}
 
  glm.nb(
-  Y ~ . - 1,        
+  Y ~ . -1,        
   data = data.frame(Y = y_mRS, X_design),
   link = log
 )

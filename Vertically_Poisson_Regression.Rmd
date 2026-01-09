@@ -236,8 +236,10 @@ poisson_dual_gradient_ascent <- function(Y, X, lambda, u0 = NULL,
 
 
   }
+  
+  beta <- t(X) %*% u / (nrow(X)  * lambda)
 
-  list(u = u, objective = f)
+  list(u = u, objective = f, b = beta)
 }
 
 
@@ -351,17 +353,22 @@ y_mRS <- y_mRS[idx_keep]
 
 
 
-mRS_opt_u <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.002, max_iter = 5e4)$u
 
-mRS_dual_beta <- t(X_design) %*% mRS_opt_u / (nrow(X_design)  * 0.002)
+
+mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.002, max_iter = 5e4)$b
 ```
 
 ```{r}
-glm(
+Poisson_mRS <- glm(
   Y ~ . - 1,
   data   = data.frame(Y = y_mRS, X_design),
   family = poisson(link = "log")
 )
+
+Poisson_mRS
+
+sum(residuals(Poisson_mRS, type = "pearson")^2) /
+           Poisson_mRS$df.residual
 ```
 
 
