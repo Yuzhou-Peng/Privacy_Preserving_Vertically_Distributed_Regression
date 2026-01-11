@@ -368,7 +368,11 @@ sum(residuals(Poisson_mRS, type = "pearson")^2) /
            Poisson_mRS$df.residual
 ```
 
+```{r}
+chem_cols <- names(nmda)[str_detect(names(nmda), "M[0]$")]
 
+chem_cols
+```
 
 
 
