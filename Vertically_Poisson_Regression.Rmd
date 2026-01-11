@@ -304,7 +304,7 @@ diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN
 ```
 
 
-Monthly grouped numbers of cases v.s. all chemicals
+
 
 ```{r}
 library(readxl)
@@ -314,6 +314,8 @@ nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_populati
 
 ```
 
+
+Monthly grouped numbers of cases v.s. all chemicals
 ```{r}
 source("NMDA_preprocessing.R")
 
@@ -327,9 +329,9 @@ X_chemicals <- model.matrix(n_cases ~ . , data = df_model)[, -1]
 #t(X_chemicals) %*% poisson_sim_u_opt_nmda / (nrow(X_chemicals)  * 0.02)
 ```
 
-mRS
 
 
+mRS ~ Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0
 ```{r}
 y_mRS <- nmda$mRS
 y_mRS <- as.numeric(y_mRS)
@@ -350,14 +352,9 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-
-
-
-
-
 mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.002, max_iter = 5e4)$b
 ```
-
+Base R fitting result
 ```{r}
 Poisson_mRS <- glm(
   Y ~ . - 1,
@@ -370,6 +367,8 @@ Poisson_mRS
 sum(residuals(Poisson_mRS, type = "pearson")^2) /
            Poisson_mRS$df.residual
 ```
+
+
 
 
 
