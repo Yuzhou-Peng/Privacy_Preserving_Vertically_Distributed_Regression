@@ -309,6 +309,7 @@ diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN
 ```{r}
 library(readxl)
 library(tidyverse)
+library(stringr)
 
 nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
 
@@ -367,12 +368,48 @@ Poisson_mRS
 sum(residuals(Poisson_mRS, type = "pearson")^2) /
            Poisson_mRS$df.residual
 ```
-
+Select all variables of chemicals (not highly correlated)
 ```{r}
-chem_cols <- names(nmda)[str_detect(names(nmda), "M[0]$")]
+chem_cols <- names(nmda)[str_detect(names(nmda), "M[0-3]$")]
 
 chem_cols
+
+chem_names_df <- tibble(var = chem_cols) %>%
+  mutate(
+    lag = str_extract(var, "M[0-3]$"),
+    pollutant = str_remove(var, "_24h_M[0-3]$|_M[0-3]$"),
+    is_24h = str_detect(var, "_24h_")
+  )
+
+chem_selected <- chem_names_df %>%
+  group_by(pollutant, lag) %>%
+  arrange(desc(is_24h)) %>%   # prioritize 24h
+  slice(1) %>%
+  ungroup()
+
+chem_selected
+
+X_all_chem <- nmda %>%
+  select(all_of(chem_selected$var))
+
+
+idx_keep_all_chem <- apply(X_all_chem, 1, function(r) all(is.finite(r)))
+
+X_all_chem <- X_all_chem[idx_keep_all_chem, , drop = FALSE]
+y_mRS_all_chem <- as.numeric(nmda$mRS)[idx_keep_all_chem ]
+
+mRS_beta_Poisson_all_chem <- poisson_dual_gradient_ascent(Y = y_mRS_all_chem, X = X_all_chem, lambda = 0.002, max_iter = 5e4)$b
 ```
+
+```{r}
+glm(
+  Y ~ . - 1,
+  data   = data.frame(Y = as.numeric(nmda$mRS), X_all_chem),
+  family = poisson(link = "log")
+)
+```
+
+
 
 
 
