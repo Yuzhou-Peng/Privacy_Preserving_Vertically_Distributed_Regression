@@ -310,6 +310,7 @@ diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN
 library(readxl)
 library(tidyverse)
 library(stringr)
+library(glmnet)
 
 nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
 
@@ -357,16 +358,24 @@ mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, l
 ```
 Base R fitting result
 ```{r}
-Poisson_mRS <- glm(
+coef(
+  glmnet(
+  x = X_design,
+  y = y_mRS,
+  family = "poisson",
+  alpha = 0,            # ridge
+  lambda = 0.02,
+  intercept = FALSE,    # <-- NO intercept
+  standardize = FALSE   # already standardized
+  )
+)
+
+glm(
   Y ~ . - 1,
   data   = data.frame(Y = y_mRS, X_design),
   family = poisson(link = "log")
 )
 
-Poisson_mRS
-
-sum(residuals(Poisson_mRS, type = "pearson")^2) /
-           Poisson_mRS$df.residual
 ```
 Select all variables of chemicals (not highly correlated)
 ```{r}
@@ -407,6 +416,18 @@ glm(
   data   = data.frame(Y = as.numeric(nmda$mRS), X_all_chem),
   family = poisson(link = "log")
 )
+
+coef(
+  glmnet(
+  x = X_all_chem,
+  y = as.numeric(nmda$mRS),
+  family = "poisson",
+  alpha = 0,            # ridge
+  lambda = 0.05,
+  intercept = FALSE,    # <-- NO intercept
+  standardize = FALSE   # already standardized
+  )
+)
 ```
 Only M0 index
 ```{r}
@@ -429,6 +450,49 @@ glm(
   Y ~ . - 1,
   data   = data.frame(Y = as.numeric(nmda$mRS), X_M0_chem),
   family = poisson(link = "log")
+)
+
+coef(
+  glmnet(
+  x = X_M0_chem,
+  y = as.numeric(nmda$mRS),
+  family = "poisson",
+  alpha = 0,            # ridge
+  lambda = 0.1,
+  intercept = FALSE,    # <-- NO intercept
+  standardize = FALSE   # already standardized
+  )
+)
+```
+
+M0 chemicals that are significant
+```{r}
+chem_M0_significant <- chem_selected_M0 %>%
+  filter(pollutant != "NO2" & pollutant != "O3" )
+
+X_M0_chem_significant <- nmda %>%
+  select(all_of(chem_M0_significant$var))
+
+mRS_beta_Poisson_M0_chem_significant <- poisson_dual_gradient_ascent(Y = y_mRS_M0_chem, X = X_M0_chem_significant, lambda = 0.05, max_iter = 7e4)$b
+```
+
+```{r}
+glm(
+  Y ~ . - 1,
+  data   = data.frame(Y = as.numeric(nmda$mRS), X_M0_chem_significant),
+  family = poisson(link = "log")
+)
+
+coef(
+  glmnet(
+  x = X_M0_chem_significant,
+  y = as.numeric(nmda$mRS),
+  family = "poisson",
+  alpha = 0,            # ridge
+  lambda = 0.05,
+  intercept = FALSE,    # <-- NO intercept
+  standardize = FALSE   # already standardized
+  )
 )
 ```
 
