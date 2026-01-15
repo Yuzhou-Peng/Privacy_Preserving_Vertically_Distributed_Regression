@@ -364,7 +364,7 @@ coef(
   y = y_mRS,
   family = "poisson",
   alpha = 0,            # ridge
-  lambda = 0.02,
+  lambda = 0.002,
   intercept = FALSE,    # <-- NO intercept
   standardize = FALSE   # already standardized
   )
