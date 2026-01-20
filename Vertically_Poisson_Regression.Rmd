@@ -354,7 +354,7 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.002, max_iter = 5e4)$b
+mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.02, max_iter = 5e4)$b
 ```
 Base R fitting result
 ```{r}
@@ -364,7 +364,7 @@ coef(
   y = y_mRS,
   family = "poisson",
   alpha = 0,            # ridge
-  lambda = 0.002,
+  lambda = 0.02,
   intercept = FALSE,    # <-- NO intercept
   standardize = FALSE   # already standardized
   )
@@ -417,7 +417,7 @@ glm(
   family = poisson(link = "log")
 )
 
-coef(
+baseR_beta_Poisson_coef_all_chem <- coef(
   glmnet(
   x = X_all_chem,
   y = as.numeric(nmda$mRS),
@@ -428,6 +428,16 @@ coef(
   standardize = FALSE   # already standardized
   )
 )
+
+as.numeric(baseR_beta_Poisson_coef_all_chem)
+
+
+
+data.frame(
+  Base_R = as.numeric(baseR_beta_Poisson_coef_all_chem)[2:29],
+  Dual = mRS_beta_Poisson_all_chem
+)
+
 ```
 Only M0 index
 ```{r}
@@ -452,7 +462,7 @@ glm(
   family = poisson(link = "log")
 )
 
-coef(
+baseR_beta_Poisson_coef_M0 <- coef(
   glmnet(
   x = X_M0_chem,
   y = as.numeric(nmda$mRS),
@@ -462,6 +472,11 @@ coef(
   intercept = FALSE,    # <-- NO intercept
   standardize = FALSE   # already standardized
   )
+)
+
+data.frame(
+  Base_R = as.numeric(baseR_beta_Poisson_coef_M0)[2:8],
+  Dual = mRS_beta_Poisson_M0_chem
 )
 ```
 
@@ -473,7 +488,7 @@ chem_M0_significant <- chem_selected_M0 %>%
 X_M0_chem_significant <- nmda %>%
   select(all_of(chem_M0_significant$var))
 
-mRS_beta_Poisson_M0_chem_significant <- poisson_dual_gradient_ascent(Y = y_mRS_M0_chem, X = X_M0_chem_significant, lambda = 0.05, max_iter = 7e4)$b
+mRS_beta_Poisson_M0_chem_significant <- poisson_dual_gradient_ascent(Y = y_mRS_M0_chem, X = X_M0_chem_significant, lambda = 0.05, max_iter = 5e4)$b
 ```
 
 ```{r}
@@ -483,7 +498,7 @@ glm(
   family = poisson(link = "log")
 )
 
-coef(
+baseR_beta_Poisson_coef_M0_significant <- coef(
   glmnet(
   x = X_M0_chem_significant,
   y = as.numeric(nmda$mRS),
@@ -493,6 +508,11 @@ coef(
   intercept = FALSE,    # <-- NO intercept
   standardize = FALSE   # already standardized
   )
+)
+
+data.frame(
+  Base_R = as.numeric(baseR_beta_Poisson_coef_M0_significant)[2:6],
+  Dual = mRS_beta_Poisson_M0_chem_significant
 )
 ```
 
