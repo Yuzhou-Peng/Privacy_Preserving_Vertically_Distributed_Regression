@@ -311,6 +311,7 @@ library(readxl)
 library(tidyverse)
 library(stringr)
 library(glmnet)
+library(MASS)
 
 nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
 
@@ -439,6 +440,7 @@ data.frame(
 )
 
 ```
+
 Only M0 index
 ```{r}
 chem_selected_M0 <- chem_selected %>%
@@ -557,8 +559,35 @@ for (i in 1:nrow(nmda)) {
 nmda$CSFrank[53] <- 1
 ```
 
+
+# CSFrank ~ M0 chemicals
+```{r}
+CSF_beta_Poisson_M0_chem <- poisson_dual_gradient_ascent(Y = nmda$CSFrank, X = X_M0_chem, lambda = 0.1, max_iter = 1e5)$b
+```
+
+# Base R
 ```{r}
 
+coef(
+  glmnet(
+  x = X_M0_chem,
+  y = as.numeric(nmda$CSFrank),
+  family = "poisson",
+  alpha = 0,            # ridge
+  lambda = 0.1,
+  intercept = FALSE,    # <-- NO intercept
+  standardize = FALSE   # already standardized
+  )
+)
+
+```
+
+```{r}
+ glm.nb(
+  Y ~ . - 1,
+  data = data.frame(Y = nmda$CSFrank, X_M0_chem),
+  control = glm.control(maxit = 100)
+)$theta
 ```
 
 
