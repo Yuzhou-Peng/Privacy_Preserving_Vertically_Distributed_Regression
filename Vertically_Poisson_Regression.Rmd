@@ -247,7 +247,10 @@ poisson_dual_gradient_ascent <- function(Y, X, lambda, u0 = NULL,
 ```
 
 ```{r}
-poisson_sim_u_opt <- poisson_dual_gradient_ascent(Y = simulation_data$Y, X = X, lambda = 0.02, u0 = rep(0, nrow(X)))$u
+source("Poisson_regression.R")
+
+
+poisson_sim_u_opt <- poisson_dual_gradient_ascent(Y = simulation_data$Y, gram_mat = (as.matrix(X) %*% t(as.matrix(X))), lambda = 0.02, u0 = rep(0, length(simulation_data$Y)))$u
 t(X) %*% poisson_sim_u_opt / (nrow(X)  * 0.02)
 ```
 

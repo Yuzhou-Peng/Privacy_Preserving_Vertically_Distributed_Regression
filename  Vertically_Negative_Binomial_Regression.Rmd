@@ -224,10 +224,40 @@ NB_dual_gradient_ascent <- function(u_init, X, y, r, m, lambda,
 ```
 
 ```{r}
+NB_dual_gradient_ascent <- function(u_init, gram_mat, y, r, m, lambda, 
+                            lr = 0.01, tol = 1e-6, max_iter = 1e6) {
+  
+  XXT <- as.matrix(gram_mat)
+  u <- u_init
+  for (iter in 1:max_iter) {
+    g <- grad_D(u, XXT, y, r, m, lambda)
+    u_new <- u + lr * g
+    if (any(r + u_new <= 0) || any(y - u_new <= 0)) {
+      warning("Step out of domain, reducing step size")
+      lr <- lr / 2
+      next
+    }
+    if (sqrt(sum((u_new - u)^2)) < tol) break
+    u <- u_new
+  }
+  
+  
+  list(u = u, iter = iter, value = D_obj(u, XXT, y, r, m, lambda))
+}
 
-NB_dual_gradient_ascent(u_init = rep(-1, 10000), X = as.matrix(X), y = simulation_data$Y, r = 17, m = 10000, lambda = 0.02)$b
+```
 
+```{r}
+opt_u_backtrack <- NB_dual_gradient_ascent(u_init = rep(-1, 10000),X = as.matrix(X), y = simulation_data$Y, r = 5, m = 1e4, lambda = 0.02, max_iter = 1e6)$u
 
+t(X) %*% opt_u_backtrack / (1e4  * 0.02)
+```
+
+```{r}
+
+opt_u <- proj_grad_ascent_nb(u_init = rep(-1, 10000), gram_mat = (as.matrix(X) %*% t(as.matrix(X)) ), y = simulation_data$Y, r = 5, m = 1e4, lambda = 0.02, max_iter = 1000)$u_opt
+
+t(X) %*% opt_u / (1e4  * 0.02)
 ```
 
 
