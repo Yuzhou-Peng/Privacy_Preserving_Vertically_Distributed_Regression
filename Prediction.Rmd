@@ -1,0 +1,66 @@
+---
+title: "Prediction"
+output: html_document
+---
+
+```{r}
+source("Poisson_regression.R")
+source("Negative_binomial_regression.R")
+```
+
+```{r}
+Poisson_data_generete <- function(X, true_coefficient){
+  
+  n_X <- nrow(X)
+  X <- as.matrix(X)
+  
+  beta_true <- true_coefficient
+  
+  eta <- as.matrix(X) %*% as.matrix(beta_true)
+  Y_mean <- exp(eta)
+  
+  # Generate Y values according to Y_mean 
+  
+  Y <- rpois(n = n_X, lambda = Y_mean) 
+  
+  sim_data <- cbind(Y, X)
+
+  return(sim_data)
+}
+
+# Example
+
+n <- 400
+
+set.seed(115)
+
+x1 <- runif(n = n, min = 0, max = 2)
+x2 <- rexp(n = n, rate = 1)
+x3 <- rbinom(n = n, size = 5, prob = 0.1)
+x3 <- as.numeric(x3)
+beta <- c(3, 1, 2)
+
+X <- data.frame(
+  "X1" <- x1,
+  "X2" <- x2,
+  "X3" <- x3
+)
+
+simulation_data <- Poisson_data_generete(X, true_coefficient = beta)
+simulation_data <- as.data.frame(simulation_data)
+colnames(simulation_data) <- c("Y", "X1", "X2", "X3")
+
+```
+
+
+```{r}
+opt_u_NB <- NB_dual_gradient_ascent(u_init = rep(-1, 400), gram_mat = as.matrix(X) %*% t(as.matrix(X)), y = simulation_data$Y, r = 1e5, m = 400, max_iter = 5e4, lambda = 0.02 )$u
+
+as.matrix(t(X)) %*% opt_u_NB / (400  * 0.02)
+```
+
+```{r}
+opt_u_Poisson <- poisson_dual_gradient_ascent(Y = simulation_data$Y, u0 = rep(0, 400), gram_mat = as.matrix(X) %*% t(as.matrix(X)), lambda = 0.02)
+
+as.matrix(t(X)) %*% opt_u_Poisson$u / (400  * 0.02)
+```

@@ -35,7 +35,7 @@ NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
 
 # Example
 
-n <- 10000 
+n <- 400 
 
 
 x1 <- runif(n = n, min = 0, max = 2)
@@ -255,9 +255,9 @@ t(X) %*% opt_u_backtrack / (1e4  * 0.02)
 
 ```{r}
 
-opt_u <- proj_grad_ascent_nb(u_init = rep(-1, 10000), gram_mat = (as.matrix(X) %*% t(as.matrix(X)) ), y = simulation_data$Y, r = 5, m = 1e4, lambda = 0.02, max_iter = 1000)$u_opt
+opt_u <- NB_dual_gradient_ascent(u_init = rep(-1, 400), gram_mat = (as.matrix(X) %*% t(as.matrix(X)) ), y = simulation_data$Y, r = 5, m = 400, lambda = 0.02, max_iter = 5e5)$u
 
-t(X) %*% opt_u / (1e4  * 0.02)
+as.matrix(t(X)) %*% opt_u / (400  * 0.02)
 ```
 
 
