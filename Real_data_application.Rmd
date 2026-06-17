@@ -1,0 +1,120 @@
+---
+title: "Real_data_application"
+output: html_document
+---
+
+```{r}
+
+library(readxl)
+library(tidyverse)
+library(stringr)
+library(glmnet)
+library(MASS)
+
+
+```
+
+```{r}
+source("Poisson_regression.R")
+source("Negative_binomial_regression.R")
+```
+
+
+```{r}
+nmda <- read_excel("NMDA_with_population_sex_ratio_copy.xlsx")
+
+y_mRS <- nmda$mRS
+y_mRS <- as.numeric(y_mRS)
+
+X_design <- nmda %>%
+  dplyr::select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
+
+X_design <- as.matrix(X_design)
+X_design <- apply(X_design, 2, as.numeric)
+
+
+
+idx_keep <- apply(X_design, 1, function(r) all(is.finite(r)))
+sum(!idx_keep)   # how many rows dropped
+
+X_design <- X_design[idx_keep, , drop = FALSE]
+y_mRS <- y_mRS[idx_keep]
+
+mRS_dual_u_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 5e4)$u
+
+coef_recover(XTu = t(X_design) %*% mRS_dual_u_Poisson, u = mRS_dual_u_Poisson, lambda = 0.02)
+```
+
+```{r}
+coef(glmnet(
+  x = X_design,
+  y = y_mRS,
+  family = "poisson",
+  alpha = 0,          # Ridge penalty
+  lambda = 0.02,
+  intercept = FALSE,  # No intercept
+  standardize = TRUE
+))
+```
+Select all variables of chemicals (not highly correlated)
+```{r}
+chem_cols <- names(nmda)[str_detect(names(nmda), "M[0-3]$")]
+
+chem_cols
+
+chem_names_df <- tibble(var = chem_cols) %>%
+  mutate(
+    lag = str_extract(var, "M[0-3]$"),
+    pollutant = str_remove(var, "_24h_M[0-3]$|_M[0-3]$"),
+    is_24h = str_detect(var, "_24h_")
+  )
+
+chem_selected <- chem_names_df %>%
+  group_by(pollutant, lag) %>%
+  arrange(desc(is_24h)) %>%   # prioritize 24h
+  slice(1) %>%
+  ungroup()
+
+chem_selected
+
+X_all_chem <- nmda %>%
+  dplyr::select(all_of(chem_selected$var))
+
+
+idx_keep_all_chem <- apply(X_all_chem, 1, function(r) all(is.finite(r)))
+
+X_all_chem <- X_all_chem[idx_keep_all_chem, , drop = FALSE]
+y_mRS_all_chem <- as.numeric(nmda$mRS)[idx_keep_all_chem ]
+
+```
+
+
+
+Only M0 index
+```{r}
+chem_selected_M0 <- chem_selected %>%
+  filter(lag == "M0")
+
+X_M0_chem <- nmda %>%
+  dplyr::select(all_of(chem_selected_M0$var))
+
+idx_keep_M0_chem <- apply(X_M0_chem, 1, function(r) all(is.finite(r)))
+
+X_M0_chem <- X_M0_chem[idx_keep_M0_chem, , drop = FALSE]
+y_mRS_M0_chem <- as.numeric(nmda$mRS)[idx_keep_M0_chem ]
+
+mRS_dual_Poisson_M0_chem <- poisson_dual_gradient_ascent(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 0.02, max_iter = 5e5)$u
+coef_recover(XTu = t(X_M0_chem) %*% mRS_dual_Poisson_M0_chem, u = mRS_dual_Poisson_M0_chem, lambda = 0.02)
+```
+
+```{r}
+coef(glmnet(
+  x = X_M0_chem,
+  y = y_mRS_M0_chem,
+  family = "poisson",
+  alpha = 0,          # Ridge penalty
+  lambda = 0.02,
+  intercept = FALSE,  # No intercept
+  standardize = TRUE
+))
+```

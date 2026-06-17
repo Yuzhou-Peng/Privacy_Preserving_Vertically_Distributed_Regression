@@ -128,4 +128,10 @@ poisson_dual_gradient_ascent <- function(Y, gram_mat, lambda, u0 = NULL,
 }
 
 
-
+coef_recover <- function(XTu, u, lambda){
+  
+  b = XTu / (nrow(u)  * lambda)
+  
+  return(b)
+  
+}

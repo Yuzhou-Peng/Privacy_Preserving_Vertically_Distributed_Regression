@@ -248,7 +248,9 @@ poisson_dual_gradient_ascent <- function(Y, X, lambda, u0 = NULL,
 
 ```{r}
 source("Poisson_regression.R")
+```
 
+```{r}
 
 poisson_sim_u_opt <- poisson_dual_gradient_ascent(Y = simulation_data$Y, gram_mat = (as.matrix(X) %*% t(as.matrix(X))), lambda = 0.02, u0 = rep(0, length(simulation_data$Y)))$u
 t(X) %*% poisson_sim_u_opt / (nrow(X)  * 0.02)
@@ -272,39 +274,7 @@ feature_3_only_model$coefficients
 
 ```
 
-```{r}
-# Bootstrapping for confidence interval
 
-
-beta_estimate_dual <- newton_Poisson_optim_dual(x0 = rep(0, nrow(X)), data_set = Poisson_data_generete(X, true_coefficient = beta), response_idx = 1 )$coefficient_estimate
-
-set.seed(115)
-
-
-n_boot <- 50
-
-# Store bootstrap samples in a list
-bootstrap_samples <- vector("list", n_boot)
-
-# Perform resampling
-
-for (i in seq_len(n_boot)) {
-  bootstrap_samples[[i]] <- simulation_data[sample(nrow(simulation_data), replace = TRUE), ]
-}
-
-
-beta_estimate_dual_bootstrap <-  sapply(bootstrap_samples, function(df) {
-  bs_coeff <- newton_Poisson_optim_dual(data_set = df, x0 = rep(0, nrow(df)), response_idx = 1)$coefficient_estimate
-} )
-
-
-var_bootstrap <- apply(beta_estimate_dual_bootstrap, MARGIN = 1, FUN = var)
-
-diff_bootstrap <- sweep(beta_estimate_dual_bootstrap, 1, beta_estimate_dual, FUN = "-")
-#standardized_diff <- sweep(standardized_diff, 1, sqrt(boot_variance), FUN = "/")
-
-
-```
 
 
 
@@ -358,7 +328,9 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-mRS_dual_beta_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, X = X_design, lambda = 0.02, max_iter = 5e4)$b
+mRS_dual_u_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 5e4)$u
+
+t(X_design) %*% mRS_dual_u_Poisson / (nrow(X_design)  * 0.02)
 ```
 Base R fitting result
 ```{r}

@@ -57,3 +57,10 @@ NB_dual_gradient_ascent <- function(u_init, gram_mat, y, r, m, lambda,
 
 
 
+coef_recover <- function(XTu, u, lambda){
+  
+  b = XTu / (nrow(u)  * lambda)
+  
+  return(b)
+  
+}
