@@ -40,9 +40,13 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-mRS_dual_u_Poisson <- poisson_dual_gradient_ascent(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 5e4)$u
+mRS_dual_u_Poisson <- poisson_dual_gradient_ascent_fast(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 3e5)$u
 
-coef_recover(XTu = t(X_design) %*% mRS_dual_u_Poisson, u = mRS_dual_u_Poisson, lambda = 0.02)
+t(X_design) %*% mRS_dual_u_Poisson/(0.02 * length(mRS_dual_u_Poisson))
+
+
+mRS_dual_u_optim <- poisson_dual_optim(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.1)$u
+t(X_design) %*% mRS_dual_u_optim/(0.1 * length(mRS_dual_u_optim))
 ```
 
 ```{r}
@@ -51,9 +55,9 @@ coef(glmnet(
   y = y_mRS,
   family = "poisson",
   alpha = 0,          # Ridge penalty
-  lambda = 0.02,
+  lambda = 0.1,
   intercept = FALSE,  # No intercept
-  standardize = TRUE
+  standardize = FALSE
 ))
 ```
 Select all variables of chemicals (not highly correlated)
@@ -103,7 +107,7 @@ idx_keep_M0_chem <- apply(X_M0_chem, 1, function(r) all(is.finite(r)))
 X_M0_chem <- X_M0_chem[idx_keep_M0_chem, , drop = FALSE]
 y_mRS_M0_chem <- as.numeric(nmda$mRS)[idx_keep_M0_chem ]
 
-mRS_dual_Poisson_M0_chem <- poisson_dual_gradient_ascent(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 0.02, max_iter = 5e5)$u
+mRS_dual_Poisson_M0_chem <- poisson_dual_gradient_ascent_fast(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 0.02, max_iter = 1e5)$u
 coef_recover(XTu = t(X_M0_chem) %*% mRS_dual_Poisson_M0_chem, u = mRS_dual_Poisson_M0_chem, lambda = 0.02)
 ```
 
@@ -115,6 +119,5 @@ coef(glmnet(
   alpha = 0,          # Ridge penalty
   lambda = 0.02,
   intercept = FALSE,  # No intercept
-  standardize = TRUE
 ))
 ```

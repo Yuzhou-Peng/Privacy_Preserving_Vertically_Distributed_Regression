@@ -35,7 +35,7 @@ x1 <- runif(n = n, min = 0, max = 2)
 x2 <- rexp(n = n, rate = 1)
 x3 <- rbinom(n = n, size = 5, prob = 0.1)
 x3 <- as.numeric(x3)
-beta <- c(3, 1, 2)
+beta <- c(0.3, 0.5, 0.2)
 
 X <- data.frame(
   "X1" <- x1,
@@ -51,9 +51,15 @@ colnames(simulation_data) <- c("Y", "X1", "X2", "X3")
 
 ```{r}
 
-sim_model <- glm(Y ~ X1 + X2 + X3, family = poisson(link = "log"), data = simulation_data)
-
-summary(sim_model)
+coef(glmnet(
+  x = X,
+  y = simulation_data$Y,
+  family = "poisson",
+  alpha = 0,          # Ridge penalty
+  lambda = 0.1,
+  intercept = FALSE,  # No intercept
+  standardize = TRUE
+))
 ```
 #Likelihood, Gradient and Hessian
 ```{r}
@@ -252,8 +258,8 @@ source("Poisson_regression.R")
 
 ```{r}
 
-poisson_sim_u_opt <- poisson_dual_gradient_ascent(Y = simulation_data$Y, gram_mat = (as.matrix(X) %*% t(as.matrix(X))), lambda = 0.02, u0 = rep(0, length(simulation_data$Y)))$u
-t(X) %*% poisson_sim_u_opt / (nrow(X)  * 0.02)
+poisson_sim_u_opt <- poisson_dual_gradient_ascent_fast(Y = simulation_data$Y, gram_mat = (as.matrix(X) %*% t(as.matrix(X))), lambda = 0.2, u0 = rep(0, length(simulation_data$Y)))$u
+t(X) %*% poisson_sim_u_opt / (nrow(X)  * 0.2)
 ```
 
 
