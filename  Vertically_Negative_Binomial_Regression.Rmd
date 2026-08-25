@@ -2,11 +2,15 @@
 title: " Vertically_Negative_Regression"
 output: html_document
 ---
-
+                                                        
 ```{r}
 library(MASS)
 library(glmnet)
 library(tidyverse)
+```
+
+```{r}
+source("Negative_binomial_regression.R")
 ```
 
 ```{r}
@@ -26,7 +30,7 @@ NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
   
   rate <- y_rate
   Y_shape <- Y_mean/rate
-  Y <- rnbinom(n_X, mu = Y_mean, size = 5)
+  Y <- rnbinom(n_X, mu = Y_mean, size = 8)
   
   sim_data <- cbind(Y, X)
 
@@ -35,14 +39,14 @@ NegBin_data_generete <- function(X, true_coefficient, y_rate = 1){
 
 # Example
 
-n <- 400 
+n <- 5000 
 
 
 x1 <- runif(n = n, min = 0, max = 2)
 x2 <- rexp(n = n, rate = 1)
 x3 <- rbinom(n = n, size = 3, prob = 0.1)
 x3 <- as.numeric(x3)
-beta <- c(3, 1, 2)
+beta <- c(0.3, 0.1, 0.2)
 
 X <- data.frame(
   "X1" <- x1,
@@ -58,328 +62,78 @@ simulation_data <- as.data.frame(simulation_data)
 ```
 
 ```{r}
-glm.nb(Y~X1 + X2 + X3, data = simulation_data)
+glm.nb(Y~X1 + X2 + X3, data = as.data.frame(simulation_data))
 
+
+NB_u_sim_optim = NB_dual_optim(Y = simulation_data$Y, gram_mat = as.matrix(X) %*% t(as.matrix(X)), lambda = 0.02, r = 8)$u
+coef_recover(XTu = t(as.matrix(X)) %*% NB_u_sim_optim, u = NB_u_sim_optim, lambda = 0.02)
+
+NB_r_MoM(Y = simulation_data$Y, gram_mat = as.matrix(X) %*% t(as.matrix(X)), gamma = NB_u_sim_optim, lambda = 0.02)
 ```
 
 
 ```{r}
+NegBin_data_generete_new <- function(X, true_coefficient,
+                                 r_true = 6){
 
-#Functions to calculate  the dual likelihood
-NB_dual_likelihood <- function(Y, X, lambda, u, r){
+  n_X <- nrow(X)
   X <- as.matrix(X)
-  m <- nrow(X)
-  XXT <- X %*% t(X) 
-  
-  penalty <- ((t(u) %*% XXT %*% u)/(2*m*m*lambda))[1,1]
-  
-  major_part <- sum( (u - Y) * log(Y - u) + (Y + r) * log( Y + r ) - (r + u) * log(r + u) + (u + r) * log(r)  )/m
-  
-  
-  
-  return( major_part - penalty  )
-}
 
+  beta_true <- as.matrix(true_coefficient)
 
-NB_dual_grad <- function(Y, X, lambda, u, r){
-  
-  m <- nrow(X)
-  
-  X <- as.matrix(X)
-  XXT <- X %*% t(X)
-  
-  penalty <- (XXT %*% u)/(m*m*lambda)
-  
-  major_part <- sum(  log(Y - u) + log(r) - log(r + u)  )/m
-  
-  return( major_part - penalty )
-  
-}
+  ## True linear predictor and mean
+  eta <- X %*% beta_true
+  Y_mean <- as.vector(exp(eta))
 
+  ## Generate Negative Binomial response
+  Y <- rnbinom(n_X,
+               mu = Y_mean,
+               size = r_true)
 
-NB_dual_Hess <- function(Y, X, lambda, u, r){
-  X <- as.matrix(X)
-  m <- nrow(X)
-  XXT <- X %*% t(X) 
-  
-  main_h <- - ( 1/(Y - u) + 1/(r + u) ) /m
-  diag_main_h <- matrix(0, nrow = m, ncol = m) 
-  diag(diag_main_h) <- main_h
-  
-  H <- diag_main_h - XXT/(m*m*lambda)
-  
-  
-  
-  return(  H )
-} 
+  ## Oracle MoM estimate of r
+  numerator <- sum(Y_mean^2)
+  denominator <- sum((Y - Y_mean)^2 - Y_mean)
 
-
-```
-
-```{r}
-
-newton_NB_optim_dual <- function(f = NB_dual_likelihood, 
-                                    grad = NB_dual_grad, 
-                                    hess = NB_dual_Hess
-                                    , x0 , r,  tol = 1e-2, max_iter = 1, 
-                                    data_set, response_idx){
-  x <- x0
-  iter <- 0
-  converged <- FALSE
-  Y <- data_set[,response_idx]
-  
-  for (i in 1:max_iter) {
-    g <- -NB_dual_grad(Y, X, lambda = 0.002, u = x, r)
-    H <- -NB_dual_Hess(Y, X, lambda = 0.002, u = x, r)
-    
-    # Newton step: solve H %*% step = -g
-    step <- solve(H) %*% (-g)
-    
-    # Handle cases where Hessian might not be invertible
-   # if (inherits(step, "try-error")) {
-   #   warning("Hessian is singular at iteration ", i)
-   #   break
-    }
-    
-    x_new <- x + step
-    iter <- i
-    
-    # Check convergence (using L2 norm of gradient)
-    if ( sqrt(sum(g^2)) < 1e-2 ) {
-      converged <- TRUE
-      break
-    }
-    
-    x <- x_new
-  
-  
-  list(par = x, 
-       value = -NB_dual_likelihood(Y, X, lambda = 0.02, u = x, r), 
-       iterations = iter, 
-       converged = converged,
-       coefficient_estimate = (t(data_set[,-response_idx]) %*% x)/(nrow(data_set)*0.002))
-}
-```
-
-```{r}
-newton_NB_optim_dual(x0 = rep(-0.1, nrow(simulation_data)), r = 5, data_set = simulation_data, response_idx = 1)
-```
-
-
-
-
-```{r}
-# Negative binomial dual objective D(u)
-D_obj <- function(u, X, y, r, m, lambda) {
-  # domain check to avoid invalid logs
-  if (any(r + u <= 0) || any(y - u <= 0)) return(-Inf)
-  
-  n <- length(u)
-  h_term <- (r + u) * log((r + u) / r) +
-            (y - u) * log(y - u) -
-            (r + y) * log(r + y)
-  D_val <- mean(-h_term) - 0.5 / (m^2 * lambda) * crossprod(u, X %*% t(X) %*% u)
-  as.numeric(D_val)
-}
-
-# Gradient of D(u)
-grad_D <- function(u, X, y, r, m, lambda) {
-  n <- length(u)
-  grad_h <- log((r + u) / (r * (y - u)))   # d/du h(-u)
-  grad_val <- -grad_h / n - (1 / (m^2 * lambda)) * (X %*% (t(X) %*% u))
-  as.vector(grad_val)
-}
-
-# Hessian of D(u)
-hess_D <- function(u, X, y, r, m, lambda) {
-  n <- length(u)
-  diag_h <- - (1 / (r + u) + 1 / (y - u)) / n   # -h''(-u_i)/n
-  H <- diag(diag_h) - (1 / (m^2 * lambda)) * (X %*% t(X))
-  H
-}
-
-```
-
-```{r}
-NB_dual_gradient_ascent <- function(u_init, X, y, r, m, lambda, 
-                            lr = 0.01, tol = 1e-6, max_iter = 1e6) {
-  u <- u_init
-  for (iter in 1:max_iter) {
-    g <- grad_D(u, X, y, r, m, lambda)
-    u_new <- u + lr * g
-    if (any(r + u_new <= 0) || any(y - u_new <= 0)) {
-      warning("Step out of domain, reducing step size")
-      lr <- lr / 2
-      next
-    }
-    if (sqrt(sum((u_new - u)^2)) < tol) break
-    u <- u_new
+  if (denominator > 0) {
+    r_MoM_oracle <- numerator / denominator
+  } else {
+    r_MoM_oracle <- Inf
   }
-  
-  beta <- t(X) %*% u / (nrow(X)  * lambda)
-  
-  list(u = u, iter = iter, value = D_obj(u, X, y, r, m, lambda), b = beta)
+
+  sim_data <- cbind(Y, X)
+
+  return(list(
+    sim_data = sim_data,
+    Y = Y,
+    mu_true = Y_mean,
+    beta_true = beta_true,
+    r_true = r_true,
+    r_MoM_oracle = r_MoM_oracle
+  ))
 }
 
 ```
 
 ```{r}
-NB_dual_gradient_ascent <- function(u_init, gram_mat, y, r, m, lambda, 
-                            lr = 0.01, tol = 1e-6, max_iter = 1e6) {
-  
-  XXT <- as.matrix(gram_mat)
-  u <- u_init
-  for (iter in 1:max_iter) {
-    g <- grad_D(u, XXT, y, r, m, lambda)
-    u_new <- u + lr * g
-    if (any(r + u_new <= 0) || any(y - u_new <= 0)) {
-      warning("Step out of domain, reducing step size")
-      lr <- lr / 2
-      next
-    }
-    if (sqrt(sum((u_new - u)^2)) < tol) break
-    u <- u_new
-  }
-  
-  
-  list(u = u, iter = iter, value = D_obj(u, XXT, y, r, m, lambda))
-}
 
-```
+simulation_new = NegBin_data_generete_new(X = X, true_coefficient = beta)
 
-```{r}
-opt_u_backtrack <- NB_dual_gradient_ascent(u_init = rep(-1, 10000),X = as.matrix(X), y = simulation_data$Y, r = 5, m = 1e4, lambda = 0.02, max_iter = 1e6)$u
+simulation_data = simulation_new$sim_data
 
-t(X) %*% opt_u_backtrack / (1e4  * 0.02)
-```
+alternating_fit = NB_alternating_optim(Y = simulation_data[,1], gram_mat = as.matrix(X) %*% t(as.matrix(X)), r_init = 7 , lambda = 0.02, max_iter = 20)
 
-```{r}
+alternating_fit$history
 
-opt_u <- NB_dual_gradient_ascent(u_init = rep(-1, 400), gram_mat = (as.matrix(X) %*% t(as.matrix(X)) ), y = simulation_data$Y, r = 5, m = 400, lambda = 0.02, max_iter = 5e5)$u
+coef_recover(XTu = t(as.matrix(X)) %*% alternating_fit$u, u = alternating_fit$u, lambda = 0.02)
 
-as.matrix(t(X)) %*% opt_u / (400  * 0.02)
+glmd_fit = glm.nb(Y~X1 + X2 + X3, data = as.data.frame(simulation_data))
+glmd_fit$theta
 ```
 
 
-NMDA
-```{r}
-library(readxl)
-library(tidyverse)
-
-nmda <- read_excel("D:/Research_Vertically_Federated_Learning/NMDA_with_population_sex_ratio_copy.xlsx")
-```
-
-
-mRS ~ Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0
-```{r}
-y_mRS <- nmda$mRS
-y_mRS <- as.numeric(y_mRS)
-
-X_design <- nmda %>%
-  dplyr::select(Seizures, CO_24h_M0, AQI_M0, NO2_24h_M0, SO2_24h_M0)
-
-X_design <- as.matrix(X_design)
-X_design <- apply(X_design, 2, as.numeric)
 
 
 
-idx_keep <- apply(X_design, 1, function(r) all(is.finite(r)))
-sum(!idx_keep)   # how many rows dropped
 
-X_design <- X_design[idx_keep, , drop = FALSE]
-y_mRS <- y_mRS[idx_keep]
-
-
-mRS_dual_beta_NB <- NB_dual_gradient_ascent(u_init = rep(-1, length(y_mRS)), X = as.matrix(X_design), y = y_mRS, r = 1.7, m = length(y_mRS), lambda = 0.002, max_iter = 1e7)$b
-```
-
-
-```{r}
-
- glm.nb(
-  Y ~ . -1,        
-  data = data.frame(Y = y_mRS, X_design),
-  link = log
-)
-```
-
-Select all variables of chemicals (not highly correlated)
-```{r}
-chem_cols <- names(nmda)[str_detect(names(nmda), "M[0-3]$")]
-
-
-chem_names_df <- tibble(var = chem_cols) %>%
-  mutate(
-    lag = str_extract(var, "M[0-3]$"),
-    pollutant = str_remove(var, "_24h_M[0-3]$|_M[0-3]$"),
-    is_24h = str_detect(var, "_24h_")
-  )
-
-chem_selected <- chem_names_df %>%
-  group_by(pollutant, lag) %>%
-  arrange(desc(is_24h)) %>%   # prioritize 24h
-  slice(1) %>%
-  ungroup()
-
-
-
-X_all_chem <- nmda %>%
-  select(all_of(chem_selected$var))
-
-
-idx_keep_all_chem <- apply(X_all_chem, 1, function(r) all(is.finite(r)))
-
-X_all_chem <- X_all_chem[idx_keep_all_chem, , drop = FALSE]
-y_mRS_all_chem <- as.numeric(nmda$mRS)[idx_keep_all_chem ]
-```
-
-```{r}
-glm.nb(
-  Y ~ . - 1,
-  data   = data.frame(Y = as.numeric(nmda$mRS), X_all_chem),
-  link = log
-)
-```
-
-```{r}
-chem_selected_M0 <- chem_selected %>%
-  filter(lag == "M0")
-
-X_M0_chem <- nmda %>%
-  select(all_of(chem_selected_M0$var))
-
-idx_keep_M0_chem <- apply(X_M0_chem, 1, function(r) all(is.finite(r)))
-
-X_M0_chem <- X_M0_chem[idx_keep_M0_chem, , drop = FALSE]
-y_mRS_M0_chem <- as.numeric(nmda$mRS)[idx_keep_M0_chem ]
-
-```
-
-```{r}
-glm.nb(
-  Y ~ . - 1,
-  data   = data.frame(Y = as.numeric(nmda$mRS), X_M0_chem),
-  link = log
-)
-```
-
-M0 chemicals that are significant
-```{r}
-chem_M0_significant <- chem_selected_M0 %>%
-  filter(pollutant != "NO2" & pollutant != "O3" )
-
-X_M0_chem_significant <- nmda %>%
-  select(all_of(chem_M0_significant$var))
-
-```
-
-```{r}
-glm.nb(
-  Y ~ . - 1,
-  data   = data.frame(Y = as.numeric(nmda$mRS), X_M0_chem_significant),
-  link = log
-)
-
-```
 
 

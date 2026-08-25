@@ -11,6 +11,8 @@ library(stringr)
 library(glmnet)
 library(MASS)
 
+# For NB regression
+library(mpath)
 
 ```
 
@@ -21,6 +23,26 @@ source("Negative_binomial_regression.R")
 
 
 ```{r}
+
+standardize_X <- function(X) {
+  X <- as.matrix(X)
+  
+  x_mean <- colMeans(X)
+  x_sd <- apply(X, 2, sd)
+  
+  # avoid division by zero
+  x_sd[x_sd == 0] <- 1
+  
+  X_std <- sweep(X, 2, x_mean, "-")
+  X_std <- sweep(X_std, 2, x_sd, "/")
+  
+  list(
+    X_std = X_std,
+    center = x_mean,
+    scale = x_sd
+  )
+}
+
 nmda <- read_excel("NMDA_with_population_sex_ratio_copy.xlsx")
 
 y_mRS <- nmda$mRS
@@ -40,10 +62,12 @@ sum(!idx_keep)   # how many rows dropped
 X_design <- X_design[idx_keep, , drop = FALSE]
 y_mRS <- y_mRS[idx_keep]
 
-mRS_dual_u_Poisson <- poisson_dual_gradient_ascent_fast(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 3e5)$u
+#mRS_dual_u_Poisson <- poisson_dual_gradient_ascent_fast(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.02, max_iter = 5e4)$u
 
-t(X_design) %*% mRS_dual_u_Poisson/(0.02 * length(mRS_dual_u_Poisson))
+#t(X_design) %*% mRS_dual_u_Poisson/(0.02 * length(mRS_dual_u_Poisson))
 
+
+X_design <- standardize_X(X_design)$X_std
 
 mRS_dual_u_optim <- poisson_dual_optim(Y = y_mRS, gram_mat = as.matrix(X_design) %*% t(as.matrix(X_design)), lambda = 0.1)$u
 t(X_design) %*% mRS_dual_u_optim/(0.1 * length(mRS_dual_u_optim))
@@ -57,7 +81,7 @@ coef(glmnet(
   alpha = 0,          # Ridge penalty
   lambda = 0.1,
   intercept = FALSE,  # No intercept
-  standardize = FALSE
+  standardize = T
 ))
 ```
 Select all variables of chemicals (not highly correlated)
@@ -107,8 +131,13 @@ idx_keep_M0_chem <- apply(X_M0_chem, 1, function(r) all(is.finite(r)))
 X_M0_chem <- X_M0_chem[idx_keep_M0_chem, , drop = FALSE]
 y_mRS_M0_chem <- as.numeric(nmda$mRS)[idx_keep_M0_chem ]
 
-mRS_dual_Poisson_M0_chem <- poisson_dual_gradient_ascent_fast(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 0.02, max_iter = 1e5)$u
-coef_recover(XTu = t(X_M0_chem) %*% mRS_dual_Poisson_M0_chem, u = mRS_dual_Poisson_M0_chem, lambda = 0.02)
+#mRS_dual_Poisson_M0_chem <- poisson_dual_gradient_ascent_fast(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 0.02, max_iter = 1e5)$u
+#coef_recover(XTu = t(X_M0_chem) %*% mRS_dual_Poisson_M0_chem, u = mRS_dual_Poisson_M0_chem, lambda = 0.02)
+
+
+X_M0_chem <- standardize_X(X_M0_chem)$X_std
+mRS_u_M0_poisson <- poisson_dual_optim(Y = y_mRS_M0_chem, gram_mat = as.matrix(X_M0_chem) %*% t(as.matrix(X_M0_chem)), lambda = 1)$u
+coef_recover(XTu = t(X_M0_chem) %*% mRS_u_M0_poisson, u = mRS_u_M0_poisson, lambda = 1)
 ```
 
 ```{r}
@@ -117,7 +146,114 @@ coef(glmnet(
   y = y_mRS_M0_chem,
   family = "poisson",
   alpha = 0,          # Ridge penalty
-  lambda = 0.02,
+  lambda = 1,
   intercept = FALSE,  # No intercept
+  standardize = T
 ))
 ```
+Personal factor and index
+```{r}
+colnames(nmda)[3] = "Gender"
+nmda$Gender = as.numeric(nmda$Gender)
+nmda$Age = as.numeric(nmda$Age)
+
+nmda <- nmda %>%
+  mutate(
+    Age_range = case_when(
+      Age < 20 ~ 0,
+      Age < 30 ~ 1,
+      Age < 40 ~ 2,
+      Age < 50 ~ 3,
+      TRUE     ~ 4
+    )
+  )
+
+nmda <- nmda %>%
+  mutate(
+    Marrital_status = case_when(
+      `Marrital status` == "unmarried" ~ 0,
+      `Marrital status` == "married"   ~ 1,
+      `Marrital status` == "divorced"  ~ 2,
+      TRUE ~ NA_real_
+    )
+  )
+
+nmda$Smoking = as.numeric(nmda$Smoking)
+nmda$Drinking = as.numeric(nmda$Drinking)
+
+X_personal <- model.matrix(
+  ~ Gender + Age_range + Smoking + Drinking + `Marrital status` - 1,
+  data = nmda
+)
+
+
+mRS_u_personal_poisson <- poisson_dual_optim(Y = nmda$mRS, gram_mat = as.matrix(X_personal) %*% t(as.matrix(X_personal)), lambda = 1)$u
+coef_recover(XTu = t(X_personal) %*% mRS_u_personal_poisson, u = mRS_u_personal_poisson, lambda = 1)
+```
+
+```{r}
+coef(glmnet(
+  x = X_personal,
+  y = nmda$mRS,
+  family = "poisson",
+  alpha = 0,          # Ridge penalty
+  lambda = 1,
+  intercept = FALSE,  # No intercept
+  standardize = F
+))
+```
+
+Personal factors and M0 chemical pollutions combined
+```{r}
+X_combine = cbind(X_personal, X_M0_chem)
+
+mRS_u_combine_poisson <- poisson_dual_optim(Y = nmda$mRS, gram_mat = as.matrix(X_combine) %*% t(as.matrix(X_combine)), lambda = 0.5)$u
+coef_recover(XTu = t(X_combine) %*% mRS_u_combine_poisson, u = mRS_u_combine_poisson, lambda = 0.5)
+```
+
+```{r}
+coef(glmnet(
+  x = X_combine,
+  y = nmda$mRS,
+  family = "poisson",
+  alpha = 0,          # Ridge penalty
+  lambda = 0.5,
+  intercept = FALSE,  # No intercept
+  standardize = F
+)) 
+```
+
+```{r}
+mRS_u_combine_NB <- NB_dual_optim(y = nmda$mRS, gram_mat = as.matrix(X_combine) %*% t(as.matrix(X_combine)), lambda = 0.5, r = 10)$u
+coef_recover(XTu = t(X_combine) %*% mRS_u_combine_NB, u = mRS_u_combine_NB, lambda = 0.5)
+```
+
+```{r}
+X_combine_df <- as.data.frame(X_combine)
+X_combine_df$mRS <- nmda$mRS
+
+colnames(X_combine_df) <- make.names(colnames(X_combine_df))
+
+NB_formula <- as.formula(
+  paste(
+    "mRS ~",
+    paste(colnames(X_combine_df)[colnames(X_combine_df) != "Y"],
+          collapse = " + "),
+    "-1"
+  )
+)
+
+glmregNB(
+  formula = NB_formula,
+  data = X_combine_df,
+  alpha = 0,      # ridge
+  lambda = 0.5,
+  standardize = FALSE,
+  intercept = FALSE
+)
+```
+
+```{r}
+
+```
+

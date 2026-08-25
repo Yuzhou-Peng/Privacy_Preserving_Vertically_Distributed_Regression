@@ -128,13 +128,6 @@ poisson_dual_gradient_ascent <- function(Y, gram_mat, lambda, u0 = NULL,
 }
 
 
-coef_recover <- function(XTu, u, lambda) {
-  m <- length(u)
-  b <- XTu / (m * lambda)
-  b <- matrix(b, ncol = 1)
-  return(b)
-}
-
 
 poisson_dual_likelihood_fast <- function(Y, XXT, lambda, u, XXTu = NULL) {
   m <- length(Y)
@@ -319,4 +312,12 @@ poisson_dual_optim <- function(Y, gram_mat, lambda,
     convergence = fit$convergence,
     message = fit$message
   )
+}
+
+coef_recover <- function(XTu, u, lambda){
+  
+  b = XTu / (length(u)  * lambda)
+  
+  return(b)
+  
 }
